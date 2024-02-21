@@ -1410,6 +1410,7 @@ class AbstractSpinnakerBase(ConfigHandler):
         self._execute_insert_chip_power_monitors(system_placements)
         self._execute_insert_extra_monitor_vertices(system_placements)
 
+
         self._report_partitioner()
         self._do_placer(system_placements)
         self._report_placements_with_application_graph()
