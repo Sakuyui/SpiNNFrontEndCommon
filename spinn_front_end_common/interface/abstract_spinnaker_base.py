@@ -60,6 +60,7 @@ from pacman.model.placements import Placements
 from pacman.model.routing_tables import MulticastRoutingTables
 from pacman.operations.fixed_route_router import fixed_route_router
 from pacman.operations.partition_algorithms import splitter_partitioner
+from pacman.operations.partitioner_selector import PartitionerSelector
 from pacman.operations.placer_algorithms import place_application_graph
 from pacman.operations.router_algorithms import (
     basic_dijkstra_routing, ner_route, ner_route_traffic_aware,
@@ -919,7 +920,7 @@ class AbstractSpinnakerBase(ConfigHandler):
         if self._data_writer.get_n_vertices() == 0:
             return
         with FecTimer("Splitter partitioner", TimerWork.OTHER):
-            self._data_writer.set_n_chips_in_graph(splitter_partitioner())
+            self._data_writer.set_n_chips_in_graph(PartitionerSelector('random').get_n_chips())
 
     def _execute_insert_chip_power_monitors(
             self, system_placements: Placements):
@@ -1390,15 +1391,26 @@ class AbstractSpinnakerBase(ConfigHandler):
         """
         FecTimer.start_category(TimerCategory.MAPPING)
 
+        # setup java caller when using Java
         self._setup_java_caller()
+
+        # empty
         self._do_extra_mapping_algorithms()
+
+        # logs the Network Specification report is requested.
         self._report_network_specification()
 
+
         self._execute_splitter_reset()
+
         self._execute_splitter_selector()
+
+
         self._execute_delay_support_adder()
 
         self._execute_splitter_partitioner()
+        
+        # allocate boards and chips. 
         allocator_data = self._execute_allocator(total_run_time)
         self._execute_machine_generator(allocator_data)
         self._json_machine()
