@@ -392,7 +392,7 @@ def _calculate_data_extraction_energy(
         machine: Machine, n_monitors: int, n_frames: int) -> float:
     """
     Data extraction cost.
-
+    
     :param ~.Machine machine: machine description
     :param int n_monitors:
     :param int n_frames:
@@ -429,7 +429,6 @@ def _calculate_data_extraction_energy(
         energy_cost += energy_cost_of_active_router
 
     return energy_cost
-
 
 def _calculate_idle_cost(time: float, machine: Machine) -> float:
     """
