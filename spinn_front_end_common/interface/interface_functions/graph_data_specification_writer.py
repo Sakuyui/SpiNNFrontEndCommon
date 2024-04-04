@@ -92,7 +92,12 @@ class _GraphDataSpecificationWriter(object):
                                    "Generating data specifications")
             vertices_to_reset: List[AbstractRewritesDataSpecification] = list()
 
+            i = 0
             for placement in progress.over(placements):
+                print(i)
+                i += 1
+                if i > 147:
+                    print("?? " + str(i))
                 # Try to generate the data spec for the placement
                 vertex = placement.vertex
                 generated = self.__generate_data_spec_for_vertices(
@@ -161,6 +166,7 @@ class _GraphDataSpecificationWriter(object):
                     est_size = est_size.get_total_sdram(
                         FecDataView.get_max_run_time_steps())
                     total_est_size += est_size
+                    print("region sizes index=%d, size = %d, est size = %d, vertex=%s" % (i, size, est_size,  vertex.label))
                     if size > est_size:
                         logger.warning(
                             "Region {} of vertex {} is bigger than "
