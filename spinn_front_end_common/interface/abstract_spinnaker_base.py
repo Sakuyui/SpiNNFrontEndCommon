@@ -373,6 +373,10 @@ class AbstractSpinnakerBase(ConfigHandler):
             "Therefore the run call will exit immediately.")
         return False
 
+
+    def setup_optimization_configuration(self, optimization_configuration:dict):
+        self._optimization_configuration = optimization_configuration
+    
     def run_until_complete(self, n_steps: Optional[int] = None):
         """
         Run a simulation until it completes.
@@ -935,14 +939,16 @@ class AbstractSpinnakerBase(ConfigHandler):
         if self._data_writer.get_n_vertices() == 0:
             return
         with FecTimer("Splitter partitioner", TimerWork.OTHER):
-            self._data_writer.set_n_chips_in_graph(PartitionerSelector('ga', \
-                                                                       self._resource_constraint_configuration,  
-                                                                       extra_args=dict({
-                'neurodynamics_configuration_base_path': "C:\\Users\\Micro\\Desktop\\Research\\SNN\\SNN-research\\frameworks\\data\\",
-                'neurodynamics_configuration_name': "2024-03-30-18-57-57"
-                })).get_n_chips()
+            if self._optimization_configuration == None:
+                self._optimization_configuration = {
+                    "partitioner" : "splitter"
+                }
+
+            self._data_writer.set_n_chips_in_graph(PartitionerSelector(resource_constraint_configuration=self._resource_constraint_configuration, 
+                                                                       optimization_configuration=self._optimization_configuration 
+                                                                       )).get_n_chips()
                
-            )
+            
 
 
     def _execute_insert_chip_power_monitors(
