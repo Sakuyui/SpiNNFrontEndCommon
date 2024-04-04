@@ -20,12 +20,11 @@ from spinn_utilities.config_holder import is_config_none
 from spinn_utilities.log import FormatAdapter
 from spinn_utilities.typing.coords import XY
 from spinn_front_end_common.data import FecDataView
-from spinn_front_end_common.interface.provenance import (
-    FecTimer, GlobalProvenance, TimerCategory)
+from spinn_front_end_common.interface.provenance import (FecTimer, GlobalProvenance, TimerCategory)
 from spinn_front_end_common.utility_models import ChipPowerMonitorMachineVertex
 from spinn_front_end_common.utilities.exceptions import ConfigurationException
-from spinn_front_end_common.interface.interface_functions.compute_energy_used\
-    import (JOULES_PER_SPIKE, MILLIWATTS_PER_CHIP_ACTIVE_OVERHEAD,
+from spinn_front_end_common.interface.interface_functions.compute_energy_used \
+import (JOULES_PER_SPIKE, MILLIWATTS_PER_CHIP_ACTIVE_OVERHEAD,
             MILLIWATTS_PER_FRAME_ACTIVE_COST, MILLIWATTS_PER_FPGA,
             MILLIWATTS_PER_IDLE_CHIP)
 from spinn_front_end_common.utilities.utility_objs import PowerUsed

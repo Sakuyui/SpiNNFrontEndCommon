@@ -23,6 +23,8 @@ import signal
 import sys
 import threading
 import types
+import requests
+import time
 from threading import Condition
 from typing import (
     Dict, Iterable, Optional, Sequence, Tuple, Type,
@@ -60,6 +62,7 @@ from pacman.model.placements import Placements
 from pacman.model.routing_tables import MulticastRoutingTables
 from pacman.operations.fixed_route_router import fixed_route_router
 from pacman.operations.partition_algorithms import splitter_partitioner
+from pacman.operations.partitioner_selector import PartitionerSelector
 from pacman.operations.placer_algorithms import place_application_graph
 from pacman.operations.router_algorithms import route_application_graph
 from pacman.operations.router_compressors import (
@@ -133,6 +136,8 @@ from spinn_front_end_common.utilities.report_functions.reports import (
     sdram_usage_report_per_chip,
     tag_allocator_report)
 from spinn_front_end_common.data.fec_data_writer import FecDataWriter
+from pacman.operations.partition_algorithms.ga.entities.resource_configuration import ResourceConfiguration
+
 
 try:
     from scipy import __version__ as scipy_version
@@ -214,6 +219,10 @@ class AbstractSpinnakerBase(ConfigHandler):
             os.path.dirname(common_model_binaries.__file__))
 
         self._data_writer.set_machine_generator(self._get_machine)
+        self._profiling_do_run = True
+        self._profiling_repeat_time = 20
+
+        self._resource_constraint_configuration = ResourceConfiguration(-1, -1, 18, 128 * 1024 * 1024)
         FecTimer.end_category(TimerCategory.SETTING_UP)
 
     def _hard_reset(self) -> None:
@@ -363,6 +372,10 @@ class AbstractSpinnakerBase(ConfigHandler):
             "Therefore the run call will exit immediately.")
         return False
 
+
+    def setup_optimization_configuration(self, optimization_configuration:dict):
+        self._optimization_configuration = optimization_configuration
+    
     def run_until_complete(self, n_steps: Optional[int] = None):
         """
         Run a simulation until it completes.
@@ -595,12 +608,17 @@ class AbstractSpinnakerBase(ConfigHandler):
                         len(steps), run_time)
             for step in steps:
                 run_step = self._data_writer.next_run_step()
-                logger.info(f"Run {run_step} of {len(steps)}")
-                self._do_run(step, n_sync_steps)
+                if self._profiling_do_run:
+                    self._do_run_repeat_profiling(step, n_sync_steps)
+                else:
+                    self._do_run(step, n_sync_steps)
             self._data_writer.clear_run_steps()
         elif run_time is None and self._run_until_complete:
             logger.info("Running until complete")
-            self._do_run(None, n_sync_steps)
+            if self._profiling_do_run:
+                self._do_run_repeat_profiling(None, n_sync_steps)
+            else:
+                self._do_run(None, n_sync_steps)
         elif (not get_config_bool(
                 "Buffers", "use_auto_pause_and_resume") or
                 not is_per_timestep_sdram):
@@ -615,8 +633,11 @@ class AbstractSpinnakerBase(ConfigHandler):
                         self._data_writer.get_max_run_time_steps())
             while self._data_writer.is_no_stop_requested():
                 logger.info(f"Run {self._data_writer.next_run_step()}")
-                self._do_run(
-                    self._data_writer.get_max_run_time_steps(), n_sync_steps)
+                if self._profiling_do_run:
+                    self._do_run_repeat_profiling(self, self._data_writer.get_max_run_time_steps(), n_sync_steps)
+                else:
+                    self._do_run(
+                        self._data_writer.get_max_run_time_steps(), n_sync_steps)
             self._data_writer.clear_run_steps()
 
         # Indicate that the signal handler needs to act
@@ -909,15 +930,26 @@ class AbstractSpinnakerBase(ConfigHandler):
         Stub to allow sPyNNaker to add delay supports.
         """
 
-    # Overridden by sPyNNaker to choose a different algorithm
-    def _execute_splitter_partitioner(self) -> None:
+
+    # Overriden by spynaker to choose a different algorithm
+    def _execute_partitioner(self) -> None:
         """
         Runs, times and logs the SplitterPartitioner if required.
         """
         if self._data_writer.get_n_vertices() == 0:
             return
         with FecTimer("Splitter partitioner", TimerWork.OTHER):
-            self._data_writer.set_n_chips_in_graph(splitter_partitioner())
+            if not hasattr(self,'_optimization_configuration'):
+                self._optimization_configuration = {
+                    "partitioner" : "splitter"
+                }
+
+            self._data_writer.set_n_chips_in_graph(PartitionerSelector(resource_constraint_configuration=self._resource_constraint_configuration, 
+                                                                       optimization_configuration=self._optimization_configuration 
+                                                                       ).get_n_chips())
+               
+            
+
 
     def _execute_insert_chip_power_monitors(
             self, system_placements: Placements):
@@ -1353,16 +1385,25 @@ class AbstractSpinnakerBase(ConfigHandler):
         :param float total_run_time:
         """
         FecTimer.start_category(TimerCategory.MAPPING)
-
+        
+        # setup java caller when using Java
         self._setup_java_caller()
+
+        # empty
         self._do_extra_mapping_algorithms()
+
+        # logs the Network Specification report is requested.
         self._report_network_specification()
 
         self._execute_splitter_reset()
+
         self._execute_splitter_selector()
+
         self._execute_delay_support_adder()
 
-        self._execute_splitter_partitioner()
+        self._execute_partitioner()
+        
+        # allocate boards and chips. 
         allocator_data = self._execute_allocator(total_run_time)
         self._execute_machine_generator(allocator_data)
         self._json_machine()
@@ -1373,6 +1414,7 @@ class AbstractSpinnakerBase(ConfigHandler):
         self._execute_split_lpg_vertices(system_placements)
         self._execute_insert_chip_power_monitors(system_placements)
         self._execute_insert_extra_monitor_vertices(system_placements)
+
 
         self._report_partitioner()
         self._do_placer(system_placements)
@@ -2186,6 +2228,19 @@ class AbstractSpinnakerBase(ConfigHandler):
 
             # re-raise exception
             raise run_e
+
+    def _do_run_repeat_profiling(self, n_machine_time_steps: Optional[int],
+            n_sync_steps: int, report_profiling_result=True) -> None:
+        time_total = 0
+        for _ in range(0, self._profiling_repeat_time):
+            start = time.time()
+            self._do_run(n_machine_time_steps, n_sync_steps)
+            end = time.time()
+            time_total += (end - start)
+        average_time_elapse = time_total / self._profiling_repeat_time
+        if report_profiling_result:
+            print("Average _do_run time elapse is %lf s (Measurement Times = %d)" % (average_time_elapse, self._profiling_repeat_time))
+        return average_time_elapse
 
     def _recover_from_error(self, exception: Exception) -> None:
         """
