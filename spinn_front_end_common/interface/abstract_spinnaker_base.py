@@ -939,7 +939,7 @@ class AbstractSpinnakerBase(ConfigHandler):
         if self._data_writer.get_n_vertices() == 0:
             return
         with FecTimer("Splitter partitioner", TimerWork.OTHER):
-            if self._optimization_configuration == None:
+            if hasattr(self,'_optimization_configuration'):
                 self._optimization_configuration = {
                     "partitioner" : "splitter"
                 }
