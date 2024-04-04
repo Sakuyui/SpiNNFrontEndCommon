@@ -946,7 +946,7 @@ class AbstractSpinnakerBase(ConfigHandler):
 
             self._data_writer.set_n_chips_in_graph(PartitionerSelector(resource_constraint_configuration=self._resource_constraint_configuration, 
                                                                        optimization_configuration=self._optimization_configuration 
-                                                                       )).get_n_chips()
+                                                                       ).get_n_chips())
                
             
 
