@@ -11,9 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """
 main interface for the SpiNNaker tools
 """
+
 import logging
 import math
 import os
@@ -124,6 +126,10 @@ from spinn_front_end_common.utilities.report_functions.reports import (
     router_report_from_router_tables, router_summary_report,
     sdram_usage_report_per_chip,
     tag_allocator_report)
+import time
+from pacman.operations.partitioner_selector import PartitionerSelector
+from pacman.operations.partition_algorithms.ga.entities.resource_configuration import ResourceConfiguration
+
 
 try:
     from scipy import __version__ as scipy_version
@@ -211,6 +217,8 @@ class AbstractSpinnakerBase(ConfigHandler):
             os.path.dirname(common_model_binaries.__file__))
 
         self._data_writer.set_machine_generator(self._get_machine)
+        self._resource_constraint_configuration = ResourceConfiguration(-1, -1, 18, 128 * 1024 * 1024)
+
         FecTimer.end_category(TimerCategory.SETTING_UP)
 
     def _hard_reset(self):
@@ -295,6 +303,9 @@ class AbstractSpinnakerBase(ConfigHandler):
             "Therefore the run call will exit immediately.")
         return False
 
+    def setup_optimization_configuration(self, optimization_configuration:dict):
+        self._optimization_configuration = optimization_configuration
+    
     def run_until_complete(self, n_steps=None):
         """
         Run a simulation until it completes.
@@ -512,6 +523,10 @@ class AbstractSpinnakerBase(ConfigHandler):
         if self._data_writer.get_requires_data_generation():
             self._do_load()
 
+            
+        print("All preprocessings completed. Begin running ...")
+        time1 = time.time()
+
         # Run for each of the given steps
         if run_time is not None:
             logger.info("Running for {} steps for a total of {}ms",
@@ -541,6 +556,9 @@ class AbstractSpinnakerBase(ConfigHandler):
                 self._do_run(
                     self._data_writer.get_max_run_time_steps(), n_sync_steps)
             self._data_writer.clear_run_steps()
+        time2 = time.time()
+        elapse = time2 - time1
+        print('Steps simulation took {:.3f} ms'.format((time2-time1) * 1000.0))
 
         # Indicate that the signal handler needs to act
         # pylint: disable=protected-access
@@ -835,14 +853,21 @@ class AbstractSpinnakerBase(ConfigHandler):
         """
 
     # Overriden by spynaker to choose a different algorithm
-    def _execute_splitter_partitioner(self):
+    def _execute_partitioner(self) -> None:
         """
         Runs, times and logs the SplitterPartitioner if required.
         """
         if self._data_writer.get_n_vertices() == 0:
             return
         with FecTimer("Splitter partitioner", TimerWork.OTHER):
-            self._data_writer.set_n_chips_in_graph(splitter_partitioner())
+            if not hasattr(self,'_optimization_configuration'):
+                self._optimization_configuration = {
+                    "partitioner" : "splitter"
+                }
+
+            self._data_writer.set_n_chips_in_graph(PartitionerSelector(resource_constraint_configuration=self._resource_constraint_configuration, 
+                                                                       optimization_configuration=self._optimization_configuration 
+                                                                       ).get_n_chips())
 
     def _execute_insert_chip_power_monitors(self, system_placements):
         """
@@ -1311,7 +1336,7 @@ class AbstractSpinnakerBase(ConfigHandler):
         self._execute_splitter_selector()
         self._execute_delay_support_adder()
 
-        self._execute_splitter_partitioner()
+        self._execute_partitioner()
         allocator_data = self._execute_allocator(total_run_time)
         self._execute_machine_generator(allocator_data)
         self._json_machine()
