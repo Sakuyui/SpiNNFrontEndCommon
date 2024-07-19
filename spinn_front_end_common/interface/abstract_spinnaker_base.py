@@ -306,6 +306,10 @@ class AbstractSpinnakerBase(ConfigHandler):
     def setup_optimization_configuration(self, optimization_configuration:dict):
         self._optimization_configuration = optimization_configuration
     
+
+    def setup_evaluation_configuration(self, evaluation_configuration:dict):
+        self._evaluation_configuration = evaluation_configuration
+    
     def run_until_complete(self, n_steps=None):
         """
         Run a simulation until it completes.
@@ -1995,11 +1999,13 @@ class AbstractSpinnakerBase(ConfigHandler):
         self._execute_router_provenance_gatherer()
         self._execute_profile_data_gatherer()
 
-    def _report_energy(self):
+    def _report_energy(self, report_energy=True):
         """
         Runs, times and logs the energy report if requested.
         """
         with FecTimer("Energy report", TimerWork.REPORT) as timer:
+            if not report_energy:
+                return
             if timer.skip_if_cfg_false("Reports", "write_energy_report"):
                 return []
             if timer.skip_if_virtual_board():
@@ -2013,8 +2019,22 @@ class AbstractSpinnakerBase(ConfigHandler):
             # create energy reporter
             energy_reporter = EnergyReport()
 
+            energy_report_base_path = None
+            detailed_report_name = None
+            summary_report_name = None
+            if hasattr(self, '_evaluation_configuration'):
+                evaluation_configuration = self._evaluation_configuration
+                if 'energy_report_base_path' in evaluation_configuration:
+                    energy_report_base_path = evaluation_configuration['energy_report_base_path']
+                if 'detailed_report_name' in evaluation_configuration:
+                    detailed_report_name = evaluation_configuration['detailed_report_name']
+                if 'summary_report_name' in evaluation_configuration:
+                    summary_report_name = evaluation_configuration['summary_report_name']
+                    
+            print("report write to %s/%s and %s" % (energy_report_base_path, detailed_report_name, summary_report_name))
+                
             # run energy report
-            energy_reporter.write_energy_report(power_used)
+            energy_reporter.write_energy_report(power_used, energy_report_base_path, detailed_report_name, summary_report_name)
 
     def _do_provenance_reports(self):
         """
@@ -2131,7 +2151,9 @@ class AbstractSpinnakerBase(ConfigHandler):
 
         # FinaliseTimingData never needed as just pushed self._ to inputs
         self._do_read_provenance()
-        self._report_energy()
+        if not self._evaluation_configuration['is_report_energy'] if 'is_report_energy' in self._evaluation_configuration else True:
+            print("not report energy utilization.")
+        self._report_energy(self._evaluation_configuration['is_report_energy'] if 'is_report_energy' in self._evaluation_configuration else True)
         self._do_provenance_reports()
 
     def __do_run(self, n_machine_time_steps, n_sync_steps):

@@ -46,20 +46,23 @@ class EnergyReport(object):
     _DETAILED_FILENAME = "detailed_energy_report.rpt"
     _SUMMARY_FILENAME = "summary_energy_report.rpt"
 
-    def write_energy_report(self, power_used):
+    def write_energy_report(self, power_used, report_dir = None, detailed_report_name = None, summary_report_name = None):
         """
         Writes the report.
 
         :param ~spinn_machine.Machine machine: the machine
         :param PowerUsed power_used:
         """
-        report_dir = FecDataView.get_run_dir_path()
+        if report_dir == None:
+            report_dir = FecDataView.get_run_dir_path()
+        
 
+        
         # detailed report path
-        detailed_report = os.path.join(report_dir, self._DETAILED_FILENAME)
+        detailed_report = os.path.join(report_dir, self._DETAILED_FILENAME if detailed_report_name == None else detailed_report_name)
 
         # summary report path
-        summary_report = os.path.join(report_dir, self._SUMMARY_FILENAME)
+        summary_report = os.path.join(report_dir, self._SUMMARY_FILENAME if summary_report_name == None else summary_report_name)
 
         # create detailed report
         with open(detailed_report, "w", encoding="utf-8") as f:
